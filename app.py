@@ -12,6 +12,9 @@ app.config['UPLOAD_FOLDER'] = 'uploads'
 
 AUTHORIZED = set()
 
+# Sicherstellen, dass der Upload-Ordner existiert
+os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+
 @app.route('/')
 def home():
     key = request.args.get('key', '')
@@ -37,22 +40,39 @@ def formular():
         return "⛔ Nicht autorisiert", 403
 
     if request.method == 'POST':
-        artikel_raw = request.form.get('artikelnummern', '')
+        artikel_raw = request.form.get('artikelnummern')
+        print("[DEBUG] Rohdaten aus Textfeld:", artikel_raw)
+
+        if not artikel_raw:
+            return "⚠️ Keine Artikelnummern übermittelt."
+
         try:
             artikelnummern = [zeile.strip() for zeile in artikel_raw.splitlines() if zeile.strip()]
+            print("[DEBUG] Verarbeitete Artikelnummern:", artikelnummern)
+
             if not artikelnummern:
-                return "⚠️ Keine Artikelnummern eingegeben."
+                return "⚠️ Keine gültigen Artikelnummern eingegeben."
 
             output_path = os.path.join(app.config['UPLOAD_FOLDER'], 'result.xlsx')
+            print("[DEBUG] Schreibe nach:", output_path)
+
             run_bot(artikelnummern, output_path)
+
+            if not os.path.exists(output_path):
+                return "❌ Datei wurde nicht erstellt."
+
             return render_template("index.html", download_link="/download", key=key)
+
         except Exception as e:
             return f"❌ Fehler bei der Verarbeitung: {e}"
+
     return render_template("index.html", key=key)
 
 @app.route('/download')
 def download():
     pfad = os.path.join(app.config['UPLOAD_FOLDER'], 'result.xlsx')
+    if not os.path.exists(pfad):
+        return "❌ Datei nicht gefunden.", 404
     return send_file(pfad, as_attachment=True)
 
 @app.route('/logout')
