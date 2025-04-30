@@ -4,10 +4,9 @@
     <title>Login</title>
 </head>
 <body>
-    <h2>🔐 Zugriff geschützt</h2>
+    <h2>🔒 Passwortgeschützter Zugang</h2>
     <form method="post">
-        <label for="password">Passwort:</label>
-        <input type="password" name="password" required>
+        <input type="password" name="password" placeholder="Passwort" required>
         <button type="submit">Login</button>
     </form>
     {% if error %}
