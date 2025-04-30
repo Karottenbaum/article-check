@@ -1,52 +1,32 @@
 from flask import Flask, request, render_template, redirect, url_for, send_file
-import os
-from bot_logic import run_bot
 from werkzeug.utils import secure_filename
+import os
+import io
+from bot_logic import run_bot
 
 app = Flask(__name__)
+
+# Konfiguration für Upload-Ordner und Zugangsdaten (über Render-Umgebungsvariablen)
 app.config['UPLOAD_FOLDER'] = 'uploads'
 app.config['TOKEN'] = os.getenv("ACCESS_TOKEN")
 app.config['PASSWORD'] = os.getenv("APP_PASSWORD")
 
-@app.route('/')
+@app.route("/", methods=["GET", "POST"])
 def index():
-    token = request.args.get('key')
-    if token != app.config['TOKEN']:
-        return "⛔ Zugriff verweigert", 403
-    return redirect(url_for('login'))
+    if request.method == "POST":
+        token = request.form.get("token", "")
+        password = request.form.get("password", "")
+        file = request.files.get("excel_file")
 
-@app.route('/login', methods=['GET', 'POST'])
-def login():
-    token = request.args.get('key')
-    if token != app.config['TOKEN']:
-        return "⛔ Zugriff verweigert", 403
+        if token != app.config['TOKEN'] or password != app.config['PASSWORD']:
+            return "Zugriff verweigert", 403
 
-    error = None
-    if request.method == 'POST':
-        password = request.form.get('password')
-        if password == app.config['PASSWORD']:
-            return redirect(url_for('upload', key=token))
-        else:
-            error = '❌ Falsches Passwort'
-    return render_template('login.html', error=error)
-
-@app.route('/upload', methods=['GET', 'POST'])
-def upload():
-    token = request.args.get('key')
-    if token != app.config['TOKEN']:
-        return "⛔ Zugriff verweigert", 403
-
-    if request.method == 'POST':
-        file = request.files.get('file')
         if file:
             filename = secure_filename(file.filename)
-            filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-            file.save(filepath)
+            file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+            file.save(file_path)
 
-            output_path = run_bot(filepath)
+            result_path = run_bot(file_path)
+            return send_file(result_path, as_attachment=True)
 
-            return send_file(output_path, as_attachment=True)
-    return render_template('upload.html')
-
-if __name__ == '__main__':
-    app.run(debug=True)
+    return render_template("index.html")
