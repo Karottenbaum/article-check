@@ -1,38 +1,43 @@
-from flask import Flask, request, render_template, redirect, url_for, send_file, abort
-from werkzeug.utils import secure_filename
-from bot_logic import run_bot
+from flask import Flask, request, render_template, redirect, url_for, send_file
 import os
+from werkzeug.utils import secure_filename
 
 app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = 'uploads'
 app.config['TOKEN'] = os.getenv("ACCESS_TOKEN")
 app.config['PASSWORD'] = os.getenv("ACCESS_PASSWORD")
 
-# Zugangsschutz: Nur mit gültigem Token oder Passwort
-@app.before_request
-def restrict_access():
-    token = request.args.get("key", "")
-    password = request.args.get("pw", "")
-    valid_token = app.config.get("TOKEN", "")
-    valid_password = app.config.get("PASSWORD", "")
+# Zwischenspeicher für gültige Sessions
+authorized_sessions = set()
 
-    if token != valid_token and password != valid_password:
-        abort(403)
+@app.route("/", methods=["GET"])
+def token_check():
+    token = request.args.get("key")
+    if token and token == app.config['TOKEN']:
+        session_id = request.remote_addr
+        authorized_sessions.add(session_id)
+        return redirect(url_for("login"))
+    return "Unauthorized", 403
 
-@app.route("/", methods=["GET", "POST"])
-def index():
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    session_id = request.remote_addr
+    if session_id not in authorized_sessions:
+        return "Unauthorized", 403
+
     if request.method == "POST":
-        file = request.files.get("file")
-        if not file:
-            return "Kein File hochgeladen", 400
+        password = request.form.get("password")
+        if password == app.config['PASSWORD']:
+            return redirect(url_for("index"))
+        return render_template("login.html", error="Falsches Passwort")
+    
+    return render_template("login.html")
 
-        filename = secure_filename(file.filename)
-        filepath = os.path.join(app.config["UPLOAD_FOLDER"], filename)
-        file.save(filepath)
-
-        output_path = run_bot(filepath)
-        return send_file(output_path, as_attachment=True)
-
+@app.route("/index", methods=["GET"])
+def index():
+    session_id = request.remote_addr
+    if session_id not in authorized_sessions:
+        return redirect(url_for("login"))
     return render_template("index.html")
 
 if __name__ == "__main__":
