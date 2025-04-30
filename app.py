@@ -1,71 +1,62 @@
 from flask import Flask, request, render_template, redirect, url_for, send_file
-from werkzeug.utils import secure_filename
 import os
+from werkzeug.utils import secure_filename
 from bot_logic import run_bot
 
 app = Flask(__name__)
 
-# Konfiguration
+# Zugriffskontrolle
+app.config['TOKEN'] = os.getenv('ACCESS_TOKEN', '')
+app.config['PASSWORD'] = os.getenv('ACCESS_PASSWORD', '')
 app.config['UPLOAD_FOLDER'] = 'uploads'
-app.config['TOKEN'] = os.getenv("ACCESS_TOKEN")  # einzelner URL-Token
-app.config['PASSWORD'] = os.getenv("ACCESS_PASSWORD")
 
-# Falls ACCESS_TOKENS nicht gesetzt ist, bleibt Liste leer
-raw_tokens = os.getenv("ACCESS_TOKENS", "")
-VALID_TOKENS = [token.strip() for token in raw_tokens.split(",") if token.strip()]
-
-# Session-Ersatz (sehr einfach)
 AUTHORIZED = set()
 
 @app.route('/')
-def startseite():
-    token = request.args.get('key', '')
-    if token in VALID_TOKENS:
-        return render_template('login.html', key=token)
-    return "⛔ Zugriff verweigert – kein oder ungültiger Token", 403
-
-@app.route('/login', methods=['POST'])
-def login():
-    password = request.form.get('password', '')
+def home():
     key = request.args.get('key', '')
-    if password == app.config['PASSWORD']:
-        AUTHORIZED.add(key)
-        return redirect(url_for('formular', key=key))
-    return "⛔ Falsches Passwort", 403
+    if key == app.config['TOKEN']:
+        return redirect(url_for('login', key=key))
+    return "⛔ Kein gültiger Zugriffstoken.", 403
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    key = request.args.get('key', '')
+    if request.method == 'POST':
+        password = request.form.get('password', '')
+        if password == app.config['PASSWORD']:
+            AUTHORIZED.add(key)
+            return redirect(url_for('formular', key=key))
+        return "⛔ Falsches Passwort", 403
+    return render_template("login.html", key=key)
 
 @app.route('/form', methods=['GET', 'POST'])
 def formular():
     key = request.args.get('key', '')
     if key not in AUTHORIZED:
-        return redirect(url_for('startseite'))
+        return "⛔ Nicht autorisiert", 403
 
     if request.method == 'POST':
+        artikel_raw = request.form.get('artikelnummern', '')
         try:
-            artikelnummern = request.form.get('artikelnummern', '')
+            artikelnummern = [zeile.strip() for zeile in artikel_raw.splitlines() if zeile.strip()]
             if not artikelnummern:
-                raise ValueError("Keine Artikelnummern übermittelt.")
+                return "⚠️ Keine Artikelnummern eingegeben."
 
-            artikel_list = [a.strip() for a in artikelnummern.splitlines() if a.strip()]
-            if not artikel_list:
-                raise ValueError("Artikelnummern leer oder ungültig.")
-
-            filename = run_bot(artikel_list, output_path="result.xlsx")
-            return render_template("index.html", download_link="/download/result.xlsx")
+            output_path = os.path.join(app.config['UPLOAD_FOLDER'], 'result.xlsx')
+            run_bot(artikelnummern, output_path)
+            return render_template("index.html", download_link="/download")
         except Exception as e:
-            return f"❌ Fehler bei der Verarbeitung: {str(e)}"
-
+            return f"❌ Fehler bei der Verarbeitung: {e}"
     return render_template("index.html")
 
-@app.route('/download/<path:filename>')
-def download(filename):
-    path = os.path.join("result.xlsx")
-    return send_file(path, as_attachment=True)
+@app.route('/download')
+def download():
+    pfad = os.path.join(app.config['UPLOAD_FOLDER'], 'result.xlsx')
+    return send_file(pfad, as_attachment=True)
 
 @app.route('/logout')
 def logout():
     key = request.args.get('key', '')
     AUTHORIZED.discard(key)
-    return redirect(url_for('startseite'))
-
-if __name__ == '__main__':
-    app.run(debug=True)
+    return redirect('/')

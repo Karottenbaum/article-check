@@ -4,13 +4,10 @@
     <title>Login</title>
 </head>
 <body>
-    <h2>🔒 Passwortgeschützter Zugang</h2>
-    <form method="post">
+    <h2>🔐 Passwort eingeben</h2>
+    <form method="post" action="/login?key={{ key }}">
         <input type="password" name="password" placeholder="Passwort" required>
         <button type="submit">Login</button>
     </form>
-    {% if error %}
-        <p style="color:red;">{{ error }}</p>
-    {% endif %}
 </body>
 </html>

@@ -6,7 +6,7 @@
 <body>
     <h2>Artikelnummern eingeben (eine pro Zeile)</h2>
 
-    <form action="/form" method="post">
+    <form action="/form?key={{ request.args.get('key', '') }}" method="post">
         <textarea name="artikelnummern" rows="10" cols="50" placeholder="z.B. ZIL-00004&#10;ZIK-00004" required></textarea><br><br>
         <input type="submit" value="Abfrage starten">
     </form>
@@ -16,7 +16,7 @@
     {% endif %}
 
     <br><br>
-    <form action="/logout" method="get">
+    <form action="/logout?key={{ request.args.get('key', '') }}" method="get">
         <button type="submit">Logout</button>
     </form>
 </body>
