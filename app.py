@@ -45,10 +45,10 @@ def formular():
 
             output_path = os.path.join(app.config['UPLOAD_FOLDER'], 'result.xlsx')
             run_bot(artikelnummern, output_path)
-            return render_template("index.html", download_link="/download")
+            return render_template("index.html", download_link="/download", key=key)
         except Exception as e:
             return f"❌ Fehler bei der Verarbeitung: {e}"
-    return render_template("index.html")
+    return render_template("index.html", key=key)
 
 @app.route('/download')
 def download():

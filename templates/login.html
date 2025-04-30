@@ -4,9 +4,9 @@
     <title>Login</title>
 </head>
 <body>
-    <h2>🔐 Passwort eingeben</h2>
-    <form method="post" action="/login?key={{ key }}">
-        <input type="password" name="password" placeholder="Passwort" required>
+    <h2>🔒 Passwort eingeben</h2>
+    <form action="/login?key={{ key }}" method="post">
+        <input type="password" name="password" required>
         <button type="submit">Login</button>
     </form>
 </body>
