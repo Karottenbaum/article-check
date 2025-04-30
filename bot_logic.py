@@ -1,15 +1,16 @@
 from selenium import webdriver
-from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.firefox.options import Options
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.chrome.service import Service
-from webdriver_manager.chrome import ChromeDriverManager
+from selenium.webdriver.firefox.service import Service
+from webdriver_manager.firefox import GeckoDriverManager
 import pandas as pd
 import time
 import os
 
+# Zugangsdaten aus Umgebungsvariablen
 USERNAME = os.getenv("CONCERTO_USERNAME", "")
 PASSWORD = os.getenv("CONCERTO_PASSWORD", "")
 
@@ -19,8 +20,8 @@ def run_bot(artikelnummern, output_path):
     options.add_argument('--no-sandbox')
     options.add_argument('--disable-dev-shm-usage')
 
-    service = Service(ChromeDriverManager().install())
-    driver = webdriver.Chrome(service=service, options=options)
+    service = Service(GeckoDriverManager().install())
+    driver = webdriver.Firefox(service=service, options=options)
 
     try:
         wait = WebDriverWait(driver, 20)
@@ -31,14 +32,14 @@ def run_bot(artikelnummern, output_path):
         driver.find_element(By.NAME, "password").send_keys(PASSWORD)
         driver.find_element(By.XPATH, "//button[@type='submit']").click()
 
-        # Optional: Cookie-Banner wegklicken
+        # Cookie-Banner entfernen (falls vorhanden)
         try:
             cookie_button = WebDriverWait(driver, 5).until(
                 EC.element_to_be_clickable((By.XPATH, "//button[contains(., 'Akzeptieren')]"))
             )
             cookie_button.click()
         except:
-            pass  # Kein Cookie-Banner
+            pass
 
         results = []
 
@@ -53,12 +54,10 @@ def run_bot(artikelnummern, output_path):
 
             time.sleep(2)
 
-            # Resultat öffnen (falls vorhanden)
             try:
                 wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "a.prodDetailsLink"))).click()
                 time.sleep(2)
 
-                # Preise & Lagerdaten auslesen
                 tabelle = driver.find_element(By.CLASS_NAME, "prodSuppliers")
                 zeilen = tabelle.find_elements(By.TAG_NAME, "tr")
 
@@ -75,7 +74,7 @@ def run_bot(artikelnummern, output_path):
                             "Lager": lager
                         })
 
-            except Exception as e:
+            except Exception:
                 results.append({
                     "Manufacturer Number": nummer,
                     "Händler": "❌ Nicht gefunden",
@@ -85,6 +84,7 @@ def run_bot(artikelnummern, output_path):
 
         # Excel schreiben
         df = pd.DataFrame(results)
+        os.makedirs(os.path.dirname(output_path), exist_ok=True)
         df.to_excel(output_path, index=False)
 
     finally:
