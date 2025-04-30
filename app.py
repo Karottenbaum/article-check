@@ -1,70 +1,71 @@
-from flask import Flask, request, render_template, redirect, url_for, session, send_file
-import os
-import io
+from flask import Flask, request, render_template, redirect, url_for, send_file
 from werkzeug.utils import secure_filename
+import os
 from bot_logic import run_bot
 
 app = Flask(__name__)
-app.secret_key = os.getenv("FLASK_SECRET_KEY", "supersecretkey")
 
+# Konfiguration
 app.config['UPLOAD_FOLDER'] = 'uploads'
-app.config['TOKEN'] = os.getenv("ACCESS_TOKEN", "")
-app.config['PASSWORD'] = os.getenv("ACCESS_PASSWORD", "")
+app.config['TOKEN'] = os.getenv("ACCESS_TOKEN")  # einzelner URL-Token
+app.config['PASSWORD'] = os.getenv("ACCESS_PASSWORD")
 
+# Falls ACCESS_TOKENS nicht gesetzt ist, bleibt Liste leer
+raw_tokens = os.getenv("ACCESS_TOKENS", "")
+VALID_TOKENS = [token.strip() for token in raw_tokens.split(",") if token.strip()]
 
-@app.route("/", methods=["GET"])
-def landing_page():
-    token = request.args.get("key")
-    if token != app.config["TOKEN"]:
-        return "❌ Ungültiger Token", 403
-    session["token_ok"] = True
-    return redirect(url_for("login"))
+# Session-Ersatz (sehr einfach)
+AUTHORIZED = set()
 
+@app.route('/')
+def startseite():
+    token = request.args.get('key', '')
+    if token in VALID_TOKENS:
+        return render_template('login.html', key=token)
+    return "⛔ Zugriff verweigert – kein oder ungültiger Token", 403
 
-@app.route("/login", methods=["GET", "POST"])
+@app.route('/login', methods=['POST'])
 def login():
-    if not session.get("token_ok"):
-        return redirect(url_for("landing_page"))
+    password = request.form.get('password', '')
+    key = request.args.get('key', '')
+    if password == app.config['PASSWORD']:
+        AUTHORIZED.add(key)
+        return redirect(url_for('formular', key=key))
+    return "⛔ Falsches Passwort", 403
 
-    if request.method == "POST":
-        password = request.form.get("password")
-        if password == app.config["PASSWORD"]:
-            session["logged_in"] = True
-            return redirect(url_for("form"))
-        return render_template("login.html", error="❌ Falsches Passwort")
-    
-    return render_template("login.html")
+@app.route('/form', methods=['GET', 'POST'])
+def formular():
+    key = request.args.get('key', '')
+    if key not in AUTHORIZED:
+        return redirect(url_for('startseite'))
 
-
-@app.route("/form", methods=["GET", "POST"])
-def form():
-    if not session.get("logged_in"):
-        return redirect(url_for("login"))
-
-    if request.method == "POST":
-        artikelnummern = request.form.get("artikelnummern")
-        if not artikelnummern:
-            return "❌ Keine Artikelnummern angegeben", 400
-
-        artikel_liste = artikelnummern.strip().splitlines()
-        output_path = os.path.join(app.config["UPLOAD_FOLDER"], "result.xlsx")
-
+    if request.method == 'POST':
         try:
-            filename = run_bot(artikel_liste, output_path)
-            download_url = url_for("download_file", filename=filename)
-            return render_template("index.html", download_link=download_url)
+            artikelnummern = request.form.get('artikelnummern', '')
+            if not artikelnummern:
+                raise ValueError("Keine Artikelnummern übermittelt.")
+
+            artikel_list = [a.strip() for a in artikelnummern.splitlines() if a.strip()]
+            if not artikel_list:
+                raise ValueError("Artikelnummern leer oder ungültig.")
+
+            filename = run_bot(artikel_list, output_path="result.xlsx")
+            return render_template("index.html", download_link="/download/result.xlsx")
         except Exception as e:
-            return f"❌ Fehler bei der Verarbeitung: {e}", 500
+            return f"❌ Fehler bei der Verarbeitung: {str(e)}"
 
     return render_template("index.html")
 
+@app.route('/download/<path:filename>')
+def download(filename):
+    path = os.path.join("result.xlsx")
+    return send_file(path, as_attachment=True)
 
-@app.route("/download/<filename>")
-def download_file(filename):
-    return send_file(os.path.join(app.config['UPLOAD_FOLDER'], filename), as_attachment=True)
-
-
-@app.route("/logout")
+@app.route('/logout')
 def logout():
-    session.clear()
-    return redirect("/")
+    key = request.args.get('key', '')
+    AUTHORIZED.discard(key)
+    return redirect(url_for('startseite'))
+
+if __name__ == '__main__':
+    app.run(debug=True)
