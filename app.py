@@ -1,32 +1,39 @@
-from flask import Flask, request, render_template, redirect, url_for, send_file
+from flask import Flask, request, render_template, redirect, url_for, send_file, abort
 from werkzeug.utils import secure_filename
-import os
-import io
 from bot_logic import run_bot
+import os
 
 app = Flask(__name__)
-
-# Konfiguration für Upload-Ordner und Zugangsdaten (über Render-Umgebungsvariablen)
 app.config['UPLOAD_FOLDER'] = 'uploads'
 app.config['TOKEN'] = os.getenv("ACCESS_TOKEN")
-app.config['PASSWORD'] = os.getenv("APP_PASSWORD")
+app.config['PASSWORD'] = os.getenv("ACCESS_PASSWORD")
+
+# Zugangsschutz: Nur mit gültigem Token oder Passwort
+@app.before_request
+def restrict_access():
+    token = request.args.get("key", "")
+    password = request.args.get("pw", "")
+    valid_token = app.config.get("TOKEN", "")
+    valid_password = app.config.get("PASSWORD", "")
+
+    if token != valid_token and password != valid_password:
+        abort(403)
 
 @app.route("/", methods=["GET", "POST"])
 def index():
     if request.method == "POST":
-        token = request.form.get("token", "")
-        password = request.form.get("password", "")
-        file = request.files.get("excel_file")
+        file = request.files.get("file")
+        if not file:
+            return "Kein File hochgeladen", 400
 
-        if token != app.config['TOKEN'] or password != app.config['PASSWORD']:
-            return "Zugriff verweigert", 403
+        filename = secure_filename(file.filename)
+        filepath = os.path.join(app.config["UPLOAD_FOLDER"], filename)
+        file.save(filepath)
 
-        if file:
-            filename = secure_filename(file.filename)
-            file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-            file.save(file_path)
-
-            result_path = run_bot(file_path)
-            return send_file(result_path, as_attachment=True)
+        output_path = run_bot(filepath)
+        return send_file(output_path, as_attachment=True)
 
     return render_template("index.html")
+
+if __name__ == "__main__":
+    app.run(debug=True)
